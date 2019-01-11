@@ -1,0 +1,59 @@
+<html>
+  <title>Clocky</title>
+  <head>
+	  <style>
+			table, th, td {
+			  border: 1px solid black;
+			  border-collapse: collapse;
+			}
+			th, td {
+			  padding: 15px;
+			}
+		</style>
+  </head>
+  <body>
+  	<center>
+  	<h1>Welcome to the upload section</h1>
+  	<p>You may upload any file you like. The html files are:</p>
+		<p>
+			<table>
+			<tr>
+			  <th>Filename</th>
+			  <th>Location</th>
+			  <th>Description</th>
+			</tr>
+			<tr>
+			  <td>upload.html</td>
+			  <td>/upload</td>
+			  <td>This site</td>
+			</tr>
+			<tr>
+			  <td>index.html</td>
+			  <td>/</td>
+			  <td>landing page</td>
+			</tr>
+			<tr>
+			  <td>success.html</td>
+			  <td>/success</td>
+			  <td>Page showing after a successful file upload</td>
+			</tr>
+			<tr>
+			  <td>success_ssid.html</td>
+			  <td>/success_ssid</td>
+			  <td>Page showing after saving new SSID(Accesspoint) credentials.</td>
+			</tr>
+			</table>
+		</p>
+		<p>
+			<b>Don't forget, you may compress your files using gzip</b>
+		</p>
+		<p>
+			<form method="post" enctype="multipart/form-data">
+		    <input type="file" name="name">
+		    <input class="button" type="submit" value="Upload">
+			</form>
+		</p>
+		</center>
+  </body>
+</html>
+

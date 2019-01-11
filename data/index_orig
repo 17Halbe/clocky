@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<body onload="initSite()">
+
+<div align="center" id="clocky" >
+  <h1>Clocky Interface</h1>
+  <div>
+    <button type="button" onclick=set('status',{mode:'0'})>OFF</button>
+  	<button type="button" onclick=set('status',{mode:'1'})>Clock</button>
+    <button type="button" onclick=set('status',{mode:'2'})>Temperature</button>
+    <button type="button" onclick=set('status',{mode:'3'})>Humidity</button>
+    <button type="button" onclick=set('status',{mode:'5'})>Start Stopwatch</button>
+    <button type="button" onclick=set('status',{mode:'99'})>Stop Stopwatch</button>
+  </div>
+
+  <div>
+    Current mode : <span id="status">undefined</span><br>
+  	Time is : <span id="zeit">undefined</span><br>
+    Temperature: <span id="temp">undefined</span>
+    Humidity: <span id="hum">undefined</span>
+  </div>
+  <div>
+    <h3>Brightness</h3>
+    <span id=Brightness_label></span>
+    <input type="range" min="0" max="255" value="255" class="slider" id="Brightness" onchange=set('Brightness_label',{Brightness:this.value})>
+  </div>
+  <h3>Dots</h3>
+  <div>
+    <input type="checkbox" id="dots" onchange=set('dots_label',{blink:this.checked})><span id="dots_label">Solid</span>
+  </div>
+  <h3>Rainbow Effect</h3>
+  <div>
+    <input type="checkbox" id="rainbow" onchange=set('rainbow_label',{rainbow:this.checked})><span id="rainbow_label">Boring!</span>
+  </div>
+  <div>
+    <h3>Scoreboard</h3>
+    <span id="leading">left</span><br>
+    <input type="number" name="scoreLeft" min="0" max="99" title="Score of Player 1" value="0" onchange=set('leading',{player:'left',score:this.value})> -
+    <input type="number" name="scoreRight" min="0" max="99" title="Score of Player 2" value="0" onchange=set('leading',{player:'right',score:this.value})>
+    <button type="button" onclick=set('status',{mode:'4'})>Display</button>
+  </div>
+  <div>
+    <h3>Countdown</h3>
+    Seconds remaining:<span id="countdown_sec">not set</span><br>
+    Time of day: <input id="abs_time" type="time" name="countdown" title="Countdown time" value="00:00" onchange=set('countdown_sec',{c_mode:'abs',countdown:this.value})> <br>or<br>
+    Time from now: <input type="time" name="countdown" title="Countdown time" value="00:00" onchange=set('countdown_sec',{c_mode:'rel',countdown:this.value})>
+    <button type="button" onclick=set('status',{mode:'6'})>Start Countdown</button><BR>
+  </div>
+  <form action='/submit' method='POST'><h3>New Access Point:</h3>
+    <br>SSID:<input type='text' name='SSID' placeholder='AP name'>
+    <br>Password:<input type='password' name='PASSWORD' placeholder='password'>
+    <br><input type='submit' name='SUBMIT' value='Save'>
+  </form><br>
+</div>
+<div>
+  <span id="color_val">#ffff0f</span>
+  <input type="color" id="html5colorpicker" value="#ffff0f" onchange=set('color_val',{color:this.value.substr(1)}) style="width:85%;">
+</div>
+<div align="center"><a href="/upload">Details about this website and file upload section</a>
+<br><br><a href="/update">Upgrade Firmware</a>
+<br><br><button type="button" onclick="factoryReset()">Factory reset</button>
+</div>
+</body>
+<script>
+  function initSite() {
+    var dt = new Date();
+    document.getElementById("abs_time").value = dt.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    refreshData("true");
+  }
+  function set(response,value_dict) {
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4 && this.status == 200) {
+        document.getElementById(response).innerHTML = this.responseText;
+      }
+    };
+    url="/submit";
+    for (var key in value_dict) {
+      if (url.indexOf('?') === -1) {
+          url = url + '?'+key+'=' + value_dict[key];
+      }else {
+          url = url + '&'+key+'=' + value_dict[key];
+      }
+    }
+    xhttp.open("GET", url, true);
+    xhttp.send();
+  }
+  function factoryReset() {
+    var response = confirm("Do you really want to reset the clock to the factory defaults? \n!!! This action is irreversible !!! \nAll custom generated HTML files you uploaded will be deleted!\nAfter reset the clock will be found by its own Accesspoint: Clocky. The Password will be StephanS. Good luck!");
+    if ( response == true ) {
+      set('status',{reset:'true'});
+      alert("The clock should now have been reset to the factory defaults. Please check for the Clock to open up its own AccessPoint. The password is StephanS!");
+      refreshData(init);
+    }
+  }
+
+  setInterval(refresh, 1000);
+  function refresh()
+  {
+   refreshData();
+  }
+
+  function refreshData(init) {
+    var xmlhttp = new XMLHttpRequest();
+    xmlhttp.onreadystatechange = function() {
+      if (xmlhttp.readyState == XMLHttpRequest.DONE && xmlhttp.status == 200){
+        var json = JSON.parse(xmlhttp.responseText);
+        document.getElementById('zeit').innerHTML = json.datetime;
+        document.getElementById('temp').innerHTML = json.temperature;
+        document.getElementById('hum').innerHTML = json.humidity;
+        if (json.hasOwnProperty('status')) {
+          document.getElementById('status').innerHTML = json.status;
+        }
+        if (json.hasOwnProperty('countdown')) {
+          document.getElementById("countdown_sec").innerHTML = json.countdown;
+        }
+        if (json.hasOwnProperty('color')) {
+          document.getElementById("html5colorpicker").value = json.color;
+          document.getElementById("color_val").innerHTML = json.color;
+
+        }
+        if (json.hasOwnProperty('brightness')) {
+          document.getElementById("Brightness").value = json.brightness;
+          document.getElementById("Brightness_label").innerHTML = json.brightness;
+        }
+        if (json.hasOwnProperty('dots')) {
+          document.getElementById("dots").checked = json.dots;
+          if (json.dots) {
+            document.getElementById("dots_label").innerHTML = "Blinky";
+          } else {
+            document.getElementById("dots_label").innerHTML = "Solid";
+          }
+        }
+        if (json.hasOwnProperty('rainbow')) {
+          document.getElementById("rainbow").checked = json.rainbow;
+          if (json.rainbow) {
+            document.getElementById("rainbow_label").innerHTML = "Over the Rainbow!";
+          } else {
+            document.getElementById("rainbow_label").innerHTML = "Boring!";
+          }
+        }
+      }
+    };
+    if (Boolean(init)) {
+      xmlhttp.open('GET', '/read?init=true', true);
+    } else {
+      xmlhttp.open('GET', '/read', true);
+    }
+    xmlhttp.send();
+  };
+
+</script>
+
+</html>
