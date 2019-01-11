@@ -20,12 +20,13 @@ Current features are:
   You need 30 WS2812B LED lights, solder 28 of them into 4 7-digit displays.
   The 4 displays are then connected with each other in the following order:
 
-
+```
   24         17           8         1
 29  25  -  22  18  16  13   9  -  6   2
   30         23          14         7
 28  26  -  21  19  15  12  10  -  5   3
   27         20          11         4
+```
 
   (Great artistic work, isn't it?)
 
