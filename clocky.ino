@@ -74,9 +74,9 @@ void setup(void) {
   FastLED.setCorrection( TypicalLEDStrip );
   FastLED.setBrightness( BRIGHTNESS );
   FastLED.clear();
-  displaySegments(0, 1); 
+  displaySegments(0, 1);
   displaySegments(7, 15);
-  displaySegments(16, 1);    
+  displaySegments(16, 1);
   displaySegments(23, 15);
   FastLED.show();
   os_timer_setfn(&t1sec, timer1Callback, NULL);
@@ -84,17 +84,17 @@ void setup(void) {
   os_timer_setfn(&t50milli, timer50Callback, NULL);
 
   startDHT();
-  
-  startSPIFFS(); 
+
+  startSPIFFS();
   loadConfig();
-  
+
   if (startWiFi() == 0) {  // Connect to WiFi network
     // Sync clock
     startNTP();
   }
   // Setup MDNS responder
   startMDNS();
-  
+
 
   // Start TCP (HTTP) server
   startOTA();
@@ -105,7 +105,7 @@ void setup(void) {
   os_timer_arm(&t30sec, 15000, true);
   os_timer_arm(&t1sec, 1000, true);
   os_timer_arm(&t50milli, 150, true);
-  
+
 }
 void loadConfig() {
   File fs_file = SPIFFS.open("/setup.cfg", "r");            // Open the file for writing in SPIFFS (create if it doesn't exist)
@@ -124,7 +124,7 @@ void loadConfig() {
     //Serial.println("Brightness: " + String(FastLED.getBrightness()));
     //Serial.println("ColorMode: " + String(colorMODE));
     //Serial.println("Dots " + String(blinkDots));
-  } else { 
+  } else {
     //Serial.println("No config File found");
   }
   fs_file.close();                               // Close the file again
@@ -141,19 +141,19 @@ byte startWiFi() {
   //Serial.println("\" started\r\n");
   if (SPIFFS.exists("/ssid.info")){  // If an accesspoint file exists, get the ssid and password
     File file = SPIFFS.open("/ssid.info", "r");                    // Open the file
-    
+
     String ap_string = file.readStringUntil('\n');
     char ap_name[sizeof(ap_string)];
     ap_string.toCharArray(ap_name,sizeof(ap_string)); //read the ssid name
-    
+
     String pass_string = file.readStringUntil('\n');
     char pass[sizeof(pass_string)];
-    pass_string.toCharArray(pass,sizeof(pass_string));    //read the ssid password  
-    file.close();     
-    wifiMulti.addAP(ap_name,pass);         // add Wi-Fi networks you want to connect to  
+    pass_string.toCharArray(pass,sizeof(pass_string));    //read the ssid password
+    file.close();
+    wifiMulti.addAP(ap_name,pass);         // add Wi-Fi networks you want to connect to
     //Serial.print("Connecting to the stronger of " + ap_string + " " + AP_ssid);
-    
-  }             
+
+  }
   wifiMulti.addAP(AP_ssid,AP_password);
 
   //Serial.println("Connecting");
@@ -247,8 +247,8 @@ void startSPIFFS() { // Start the SPIFFS and list all contents
   //SPIFFS.remove("/success.html");
   SPIFFS.remove("/index.html");
   //SPIFFS.remove("/success_ssid.html");
-  
-  
+
+
   if (!SPIFFS.exists("/upload.html")) { factoryReset("/upload_orig", "/upload.html"); }
   if (!SPIFFS.exists("/success.html")) { factoryReset("/success_orig", "/success.html"); }
   if (!SPIFFS.exists("/index.html")) { factoryReset("/index_orig", "/index.html"); }
@@ -261,7 +261,7 @@ void factoryReset(String source, String dest) {
   if(!destF){
       //Serial.println("There was an error opening the " + dest + " file for writing\n");
       exit;
-  } 
+  }
   File sourceF = SPIFFS.open(source, "r");
   if(!sourceF){
     //Serial.println("Failed to open file " + source + " for reading\n");
@@ -293,11 +293,11 @@ void startServer() {
   //server.on("/reboot", reboot); //ESP.reset();
   server.on("/read", handleRead);
   server.on("/submit", handleSubmit);
-  
+
   server.onNotFound([]() {                              // If the client requests any URI
     if (!handleFileRead(server.uri()))                  // send it if it exists
       server.send(404, "text/plain", "404: Not Found"); // otherwise, respond with a 404 (Not Found) error
-  });  
+  });
   server.begin();                           // Actually start the server
   //Serial.println("HTTP server started");
 }
@@ -310,8 +310,8 @@ void timer1Callback(void *pArg) {
   refreshTimer();
 }
 void timer30Callback(void *pArg) {
-  refreshDisplayFlag = true; 
-  
+  refreshDisplayFlag = true;
+
   checkDST();
 }
 void timer50Callback(void *pArg) {
@@ -323,10 +323,10 @@ void timer50Callback(void *pArg) {
 void loop(void) {
   // Allow MDNS processing
   MDNS.update();
-  server.handleClient(); 
+  server.handleClient();
   if (refreshDisplayFlag) {
     refreshDisplayFlag = false;
-    refreshDisplay(); 
+    refreshDisplay();
   }
 }
 
@@ -334,7 +334,7 @@ void loop(void) {
 void updateHue() {
   if (colorMODE != 2)
     return;
-    
+
   colorCHSV.sat = 255;
   colorCHSV.val = 255;
   if (colorCHSV.hue >= 255){
@@ -363,7 +363,7 @@ void refreshDisplay() {
       break;
     case 4:
       displayScoreboard();
-      break;      
+      break;
     case 5:
       refreshTimer();
       // Time counter has it's own timer
@@ -372,13 +372,13 @@ void refreshDisplay() {
       refreshTimer();
       // Countdown integrated in case 5
       break;
-    default:   
-      break; 
+    default:
+      break;
   }
 }
 
 void refreshTimer() {
-  if (mode == 1 && blinkDots) {    
+  if (mode == 1 && blinkDots) {
     displayDots(3);
   } else if (mode == 5 && timerRunning == 1) {
     int elapsed = (time(nullptr) - timerValue);
@@ -387,12 +387,12 @@ void refreshTimer() {
     int m2 = (elapsed / 60) % 10 ;
     int s1 = (elapsed % 60) / 10;
     int s2 = (elapsed % 60) % 10;
-  
-    displaySegments(0, s2); 
+
+    displaySegments(0, s2);
     displaySegments(7, s1);
-    displaySegments(16, m2);    
-    displaySegments(23, m1);  
-    displayDots(0);  
+    displaySegments(16, m2);
+    displaySegments(23, m1);
+    displayDots(0);
   } else if (mode == 6) {
     int remaining = (timerValue - time(nullptr));
     if (remaining > 9999) {
@@ -406,11 +406,11 @@ void refreshTimer() {
       int hr = h % 10;
       int ml = m / 10;
       int mr = m % 10;
-      displaySegments(0, mr);    
+      displaySegments(0, mr);
       displaySegments(7, ml);
-      displaySegments(16, hr);    
-      displaySegments(23, hl);  
-      displayDots(0);  
+      displaySegments(16, hr);
+      displaySegments(23, hl);
+      displayDots(0);
     } else {
       if (remaining % 2 == 0 && remaining < 1) {
         FastLED.clear();
@@ -422,18 +422,18 @@ void refreshTimer() {
         int s1 = (remaining - m1 * 1000 - m2 * 100) / 10;
         int s2 = (remaining - m1 * 1000 - m2 * 100 - s1 * 10);
         //Serial.println(String(m1) + String(m2) + String(s1) + String(s2));
-        displaySegments(0, s2); 
+        displaySegments(0, s2);
         displaySegments(7, s1);
-        displaySegments(16, m2);    
-        displaySegments(23, m1);  
-        displayDots(1); 
-      } 
+        displaySegments(16, m2);
+        displaySegments(23, m1);
+        displayDots(1);
+      }
     }
   }
   FastLED.show();
 }
 
-void displayClock() {  
+void displayClock() {
   ////Serial.println("Refreshing Clock. Time " + String(getTimeString()));
 
   time_t now = time(nullptr);                      // Update time to now
@@ -441,16 +441,16 @@ void displayClock() {
   //time(&now);
   timeinfo = gmtime(&now);                         // Also as localtime
   byte m = timeinfo->tm_min;                       // Minutes 0 to 59
-  byte h = timeinfo->tm_hour;                       
+  byte h = timeinfo->tm_hour;
   int hl = (h / 10) == 0 ? 13 : (h / 10);
   int hr = h % 10;
   int ml = m / 10;
   int mr = m % 10;
 
-  displaySegments(0, mr);    
+  displaySegments(0, mr);
   displaySegments(7, ml);
-  displaySegments(16, hr);    
-  displaySegments(23, hl);  
+  displaySegments(16, hr);
+  displaySegments(23, hl);
   if (!blinkDots) {displayDots(0);}
   FastLED.show();
 }
@@ -463,13 +463,13 @@ void displayTemperature() {
   } else {
     int tmp1 = tmp / 10;
     int tmp2 = ((int)tmp) % 10;
-    displaySegments(23, tmp1);    
+    displaySegments(23, tmp1);
     displaySegments(16, tmp2);
-    displaySegments(7,  10);    
+    displaySegments(7,  10);
     displaySegments(0, 11);
-    displayDots(1);  
-    FastLED.show();    
-  }  
+    displayDots(1);
+    FastLED.show();
+  }
 }
 
 void displayHumidity() {
@@ -479,13 +479,13 @@ void displayHumidity() {
   } else {
     int hum1 = hum / 10;
     int hum2 = ((int)hum) % 10;
-    displaySegments(23, hum1);    
+    displaySegments(23, hum1);
     displaySegments(16, hum2);
-    displaySegments(7,  10);    
+    displaySegments(7,  10);
     displaySegments(0,  12);
-    displayDots(1);  
-    FastLED.show();    
-  }  
+    displayDots(1);
+    FastLED.show();
+  }
 }
 
 void displayScoreboard() {
@@ -493,13 +493,13 @@ void displayScoreboard() {
   int s2 = scoreLeft / 10;
   int s3 = scoreRight % 10;
   int s4 = scoreRight / 10;
-  displaySegments(0, s3);    
+  displaySegments(0, s3);
   displaySegments(7, s4);
-  displaySegments(16, s1);    
+  displaySegments(16, s1);
   displaySegments(23, s2);
-  
-  displayDots(2);  
-  FastLED.show();  
+
+  displayDots(2);
+  FastLED.show();
 }
 
 void displayDots(int dotMode) {
@@ -507,30 +507,30 @@ void displayDots(int dotMode) {
   switch (dotMode) {
     case 0:
       LEDs[14] = colorMODE == 0 ? colorCRGB : colorCHSV;
-      LEDs[15] = colorMODE == 0 ? colorCRGB : colorCHSV; 
+      LEDs[15] = colorMODE == 0 ? colorCRGB : colorCHSV;
       break;
     case 1:
       LEDs[14] = colorOFF;
-      LEDs[15] = colorOFF; 
+      LEDs[15] = colorOFF;
       break;
     case 2:
       LEDs[14] = colorOFF;
-      LEDs[15] = colorMODE == 0 ? colorCRGB : colorCHSV; 
+      LEDs[15] = colorMODE == 0 ? colorCRGB : colorCHSV;
       break;
     case 3:
       LEDs[14] = (LEDs[14] == colorOFF) ? (colorMODE == 0 ? colorCRGB : colorCHSV) : colorOFF;
       LEDs[15] = (LEDs[15] == colorOFF) ? (colorMODE == 0 ? colorCRGB : colorCHSV) : colorOFF;
-      FastLED.show();  
+      FastLED.show();
       break;
     default:
-      break;    
+      break;
   }
 }
 
 void displaySegments(int startindex, int number) {
-  // Order: 0b0 mid top-left bottom-left bottom bottom-right top-right   top 
+  // Order: 0b0 mid top-left bottom-left bottom bottom-right top-right   top
   byte numbers[] = {
-    0b00111111, // 0    
+    0b00111111, // 0
     0b00000110, // 1
     0b01011011, // 2
     0b01001111, // 3
@@ -539,7 +539,7 @@ void displaySegments(int startindex, int number) {
     0b01111101, // 6
     0b00000111, // 7
     0b01111111, // 8
-    0b01101111, // 9   
+    0b01101111, // 9
     0b01100011, // º              10
     0b00111001, // C(elcius)      11
     0b01011100, // º lower        12
@@ -547,10 +547,10 @@ void displaySegments(int startindex, int number) {
     0b01110001, // F(ahrenheit)   14
     0b01110110, // H              15
   };
-  
+
   for (int i = 0; i < 7; i++) {
     LEDs[i + startindex] = ((numbers[number] & 1 << i) == 1 << i) ? (colorMODE == 0 ? colorCRGB : colorCHSV) : colorOFF;
-  } 
+  }
 }
 
 float readDHT(bool GetHum) {
@@ -558,9 +558,9 @@ float readDHT(bool GetHum) {
   static float hum = 0;
   static long lastCheck = 0;
   Serial.println("Reading DHT. Last Check: " + String(lastCheck) + " Now: " + String(millis()) + " Diff to now: " + String(millis() - lastCheck));
-  if ( millis() - lastCheck > 2000 ) { // DHT22 does support a request only every 2 seconds. The second one is 
-    lastCheck = millis();          // save the new latest data request time 
-    if (dht.getStatusString() == "OK") { 
+  if ( millis() - lastCheck > 2000 ) { // DHT22 does support a request only every 2 seconds. The second one is
+    lastCheck = millis();          // save the new latest data request time
+    if (dht.getStatusString() == "OK") {
       hum = dht.getHumidity();
       temp= dht.getTemperature();
       //Serial.println("New Reading: Temp: " + String(temp) + " Hum: " + String(hum));
@@ -579,15 +579,15 @@ void checkDST() {
   timeinfo = gmtime(&now);                         // Also as localtime
   byte m = timeinfo->tm_min;                       // Minutes 0 to 59
   byte s = timeinfo->tm_sec;                       // Minutes 0 to 59
-  if (m == 0 && s == 0 ) { 
+  if (m == 0 && s == 0 ) {
     byte _hour = timeinfo->tm_hour;                        // Hours 0 to 23
     byte _day = timeinfo->tm_mday;                        // Day of month 1 to 31
     byte _month = timeinfo->tm_mon;                        // Months since Jan. 0 to 11
     _month += 1;                                      // Month now 1 to 12
     int _year = timeinfo->tm_year + 1900;                 // Year with 4 digits
-    
+
     //Serial.println("\nChecking for summertime.. \nIt is ");
-    if (_month < 3 || _month > 10) { 
+    if (_month < 3 || _month > 10) {
       //Serial.println("Wintertime");        // no summertime in Jan, Feb, Nov, Dez
     } else if (_month > 3 && _month < 10) {
       dst = 1; //Serial.println("Summertime");        // summertime in Apr, Mai, Jun, Jul, Aug, Sep
@@ -624,7 +624,7 @@ void handleFileUpload(){ // upload a new file to the SPIFFS
   if(upload.status == UPLOAD_FILE_START){
     path = upload.filename;
     if(!path.startsWith("/")) path = "/"+path;
-    if(!path.endsWith(".gz")) {                          // The file server always prefers a compressed version of a file 
+    if(!path.endsWith(".gz")) {                          // The file server always prefers a compressed version of a file
       String pathWithGz = path+".gz";                    // So if an uploaded file is not compressed, the existing compressed
       if(SPIFFS.exists(pathWithGz))                      // version of that file must be deleted (if it exists)
          SPIFFS.remove(pathWithGz);
@@ -731,7 +731,7 @@ void handleSubmit() {
   for (int i = 0; i < server.args(); i++) {
     //Serial.println(server.argName(i) + ": " + server.arg(i));
   }
-  
+
   if (server.hasArg("SSID") && server.hasArg("PASSWORD")) {
     //Serial.println("Got new SSID Info: " + server.arg("SSID"));
     if (saveToFile("ssid.info",server.arg("SSID") + '\n' + server.arg("PASSWORD"))) {
@@ -746,7 +746,6 @@ void handleSubmit() {
     if (server.arg("action") == "reboot" ) {
       server.send (200, "text/plain", "rebooting...");
       delay(5000);
-      WiFi.softAPdisconnect(true);
       if (startWiFi() == 0) {  // Connect to WiFi network
         // Sync clock
         startNTP();
@@ -784,13 +783,13 @@ void handleSubmit() {
     server.send(200, "text/plane", server.arg("Brightness")); //Send web page
   }
   else if (server.hasArg("blink")) {
-    blinkDots = (server.arg("blink") == "true");  
-    saveConfig();    
+    blinkDots = (server.arg("blink") == "true");
+    saveConfig();
     server.send(200, "text/plane", (blinkDots ? "Blinky" : "Solid")); //Send web page
   }
   else if (server.hasArg("rainbow")) {
-    colorMODE = (server.arg("rainbow") == "true") ? 2 : 0;  
-    saveConfig();    
+    colorMODE = (server.arg("rainbow") == "true") ? 2 : 0;
+    saveConfig();
     server.send(200, "text/plane", (colorMODE == 0) ? "Boring!" : "Over the Rainbow!"); //Send web page
   }
   else if (server.hasArg("countdown") && server.hasArg("c_mode")) {
@@ -817,10 +816,10 @@ void handleSubmit() {
     server.arg("player") == "left" ? scoreLeft = server.arg("score").toInt() : scoreRight = server.arg("score").toInt();
     server.send(200, "text/plane", scoreLeft > scoreRight ? "Left" : scoreLeft < scoreRight ? "Right" : "Even");
   }
-  else if (server.hasArg("reset")) { 
+  else if (server.hasArg("reset")) {
     factoryReset("/upload_orig", "/upload.html");
     factoryReset("/success_orig", "/success.html");
-    factoryReset("/index_orig", "/index.html"); 
+    factoryReset("/index_orig", "/index.html");
     factoryReset("/success_ssid_orig", "/success_ssid.html");
     SPIFFS.remove("/setup.cfg");
     server.send(200, "text/plane", "Done...");
@@ -836,8 +835,8 @@ void handleSubmit() {
   refreshDisplay();
 }
 bool saveConfig() {
-  if (!saveToFile("/setup.cfg", String(colorCRGB.r) + '\n' + String(colorCRGB.g) + '\n' + String(colorCRGB.b) + '\n' 
-      + String(mode) + '\n' 
+  if (!saveToFile("/setup.cfg", String(colorCRGB.r) + '\n' + String(colorCRGB.g) + '\n' + String(colorCRGB.b) + '\n'
+      + String(mode) + '\n'
       + String(FastLED.getBrightness()) + '\n'
       + String(colorMODE) + '\n'
       + String(blinkDots))
@@ -874,7 +873,7 @@ String modeToString() {
 bool saveToFile(String path, String content) {
   if(!path.startsWith("/")) path = "/"+path;
   //TODO REMOVE BEFORE SHIPPING
-  //if(path.endsWith("_orig")) return false; 
+  //if(path.endsWith("_orig")) return false;
   //Serial.print("saving Filename: "); //Serial.println(path);
   //Serial.println("Content: " + content);
   File fs_file = SPIFFS.open(path, "w");            // Open the file for writing in SPIFFS (create if it doesn't exist)
@@ -886,7 +885,7 @@ bool saveToFile(String path, String content) {
     return true;
   } else {
     return false;
-  }  
+  }
 }
 
 void handleRead() {
@@ -897,20 +896,20 @@ void handleRead() {
     long HexRGB = ((long)colorCRGB.r << 16) | ((long)colorCRGB.g << 8 ) | (long)colorCRGB.b; // get value and convert.
     init = "\",\"status\":\"" + modeToString() +
       "\",\"color\":\"#" + String(HexRGB, HEX) +
-      "\",\"brightness\":\"" + String(FastLED.getBrightness()) + 
+      "\",\"brightness\":\"" + String(FastLED.getBrightness()) +
       "\",\"dots\":\"" + String(blinkDots) +
       "\",\"rainbow\":\"" + String(colorMODE != 0);
   }
   if (mode == 5) {
     countdown = "\",\"countdown\":\"" + ((timerValue - time(nullptr)) < 0 ? "Not set" : String(timerValue - time(nullptr)));
   }
-  String json = "{\"datetime\":\"" + timeString + 
-    "\",\"temperature\":\"" + String(readDHT(false)) + 
-    "\",\"humidity\":\"" + String(readDHT(true)) +  
+  String json = "{\"datetime\":\"" + timeString +
+    "\",\"temperature\":\"" + String(readDHT(false)) +
+    "\",\"humidity\":\"" + String(readDHT(true)) +
     init +
     countdown +
     "\"}";
   server.send (200, "application/json", json);
   //Serial.println("Time request handled: " + json);
  //server.send(200, "text/plane", getTimeString()); //Send time value only to client ajax request
-} 
+}
