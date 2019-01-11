@@ -37,9 +37,9 @@ Current features are:
 
   Power the ESP8266 and the LEDs(Don't try to power the LEDs from the ESP. It's not designed to support such a high load.)
 
-#Usage
+# Usage
   Connect to the accesspoint Clocky and open http://clocky.local
   Add your local wifi accesspoint name(ssid) and the password. After that the clock will try to connect to your wifi.
   As long as that doesn't work it'll continue to keep its own AP running.
 
-#Have Fun!
+# Have Fun!
