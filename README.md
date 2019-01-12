@@ -1,4 +1,4 @@
-# clocky
+# Clocky
 A esp8266 7 digit LED(WS2812B) clock/Timer/Scoreboard/Countdown/Temp/Humidity display firmware
 
 This is a far too large firmware for a ESP8266 including a mdns supporting webserver, a NTP-time update mechanism, a Over-The-Air Firmware update option, customizable and uploadable webpages, temperature and humidity handling of a DHT22, a factory reset option and a highly customizable ...CLOCK!
