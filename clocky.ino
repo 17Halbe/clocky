@@ -1,116 +1,126 @@
-#define FASTLED_ESP8266_NODEMCU_PIN_ORDER
-#define FASTLED_ALLOW_INTERRUPTS 0
+#define                     FASTLED_ESP8266_NODEMCU_PIN_ORDER        // Tells FastLED that we are using a Nodemcu ESP8266
+#define                     FASTLED_ALLOW_INTERRUPTS 0               // Fixes LED flickering
 
-#include <FastLED.h>
-#include <ESP8266WiFi.h>
+#include <FastLED.h>            // Include the LED Library
 #include <ESP8266WebServer.h>   // Include the WebServer library
 #include <ESP8266WiFi.h>        // Include the Wi-Fi library
 #include <ESP8266WiFiMulti.h>   // Include WIFI Multi library
-#include <time.h>
+#include <time.h>               // Include C++ time handling
 #include <FS.h>                 // Include the SPIFFS library
-#include <ESP8266mDNS.h>
-#include <PolledTimeout.h>
-#include <ESP8266HTTPUpdateServer.h>
-#include "DHTesp.h"
+#include <ESP8266mDNS.h>        // Include M-DNS Handling ()
+//#include <PolledTimeout.h>
+#include <ESP8266HTTPUpdateServer.h> // Include the Over-The-Air update Library
+#include "DHTesp.h"             // Include the DHT handling Library
 
+enum DHT_modes {
+  Temp =0, Hum =1
+};
 /*
-   Global defines and vars
-*/
-#define DATA_PIN    2        // data pin : D2 (pas 4 grace au define ligne 1)
-#define NUM_LEDS    30       // number of LEDs in the strip
-#define BRIGHTNESS  255
-
-
-#define pinDHT22            5                                   // DHT22 Gpio pin
-#define TIMEZONE_OFFSET     1                                   // CET
-
-#define SERVICE_PORT        80                                  // HTTP port
-
-const char*                   AP_ssid     = "AP_Name";  // The SSID (name) of the Wi-Fi network we want to connect to
-const char*                   AP_password = "Password";     // The password of the Wi-Fi network
-const char*                   own_ssid     = "ClockY";         // The SSID (name) of the Wi-Fi network you want to create
-const char*                   own_password = "StephanS";     // The password of the Wi-Fi network
-
-char*                         pcHostDomain            = 0;        // Negociated host domain
-bool                          bHostDomainConfirmed    = false;    // Flags the confirmation of the host domain
-MDNSResponder::hMDNSService   hMDNSService            = 0;        // The handle of the clock service in the MDNS responder
-File                          fsUploadFile;                       // a File object to temporarily store the received file
-
-DHTesp dht;
-ESP8266HTTPUpdateServer httpUpdater;
-
-// TCP server at port 'SERVICE_PORT' will respond to HTTP requests
-ESP8266WebServer                    server(SERVICE_PORT);
-ESP8266WiFiMulti wifiMulti;           // Create an instance of the ESP8266WiFiMulti class, called 'wifiMulti'
-CRGB LEDs[NUM_LEDS];                                            // this creates an LED array to hold the values for each led in your strip
-
-const char*                   mdnsName                = "clocky";
-
-CRGB colorCRGB = CRGB::Red;           // Change this if you want another default color, for example CRGB::Blue
-CHSV colorCHSV = CHSV(95, 255, 255);  // Green
-CRGB colorOFF  = CRGB::Black;//(20,20,20);      // Color of the segments that are 'disabled'. You can also set it to CRGB::Black
-volatile bool blinkDots = false;        // Set this to true if you want the dots to blink in clock mode, set it to false to disable
-volatile byte colorMODE = 0;           // 0=CRGB, 1=CHSV, 2=Constant Color Changing pattern
-volatile byte mode = 1;                // 0=Clock, 1=Temperature, 2=Humidity, 3=Scoreboard, 4=Time counter
-volatile int scoreLeft = 0;
-volatile int scoreRight = 0;
-volatile long timerValue = 0;
-volatile int timerRunning = 0;
-os_timer_t t30sec;
-os_timer_t t1sec;
-os_timer_t t50milli;
-bool refreshDisplayFlag = false;
-/*
-   handleHTTPClient
+   Global defines (Defines(instead of constants) don't take up space after compilation. They basically replace their value upon compile time with every occurence of itself)
 */
 
+#define                       DATA_PIN                  2             // data pin : D2 (pas 4 grace au define ligne 1)
+#define                       NUM_LEDS                  30            // number of LEDs in the strip
+#define                       BRIGHTNESS                255           // default brightness value (0-255)
+#define                       PINDHT22                  5             // DHT22 GPIO pin
+#define                       TIMEZONE_OFFSET           1             // CET (Timezone you live in)
+#define                       SERVICE_PORT              80            // HTTP port
+#define                       AP_SSID                   "AP_Name"     // The default SSID (name) of the Wi-Fi network we want to connect to
+#define                       AP_PASSWORD               "Password"    // The default password of the Wi-Fi network
+#define                       OWN_SSID                  "ClockY"      // The SSID (name) of the Wi-Fi network we provide as as accesspoint
+#define                       OWN_PASSWORD              "StephanS"    // The password of the Wi-Fi accesspoint
+#define                       HUE_TIMER                 150           // milliseconds interval for the rainbow effect to change (the higher, the slower the change)
+#define                       STOPWATCH_TIMER           1000          // milliseconds interval for the countdown/stopwatch to be updated
+#define                       DISPLAY_TIMER             2000          // milliseconds interval for updating the Display. (Do not go below 2000 for the DHT22, 1000 for the DHT11) and checking for daylight saving time
+const char*                   MDNS_NAME                 = "clocky";   // MDNS Name for network discovery. You'll find this device at MDNS_NAME.local
+
 /*
-   setup
+    Instances:
 */
+
+MDNSResponder::hMDNSService   hMDNSService              = 0;          // The handle of the clock service in the MDNS responder
+File                          fsUploadFile;                           // a File object to temporarily store the received file
+DHTesp                        dht;                                    // create a DHT instance for the temperature/humidity sensor
+ESP8266HTTPUpdateServer       httpUpdater;                            // create the firmware OTA update Server
+ESP8266WebServer              server(SERVICE_PORT);                   // create the TCP server at port 'SERVICE_PORT' will respond to HTTP requests
+ESP8266WiFiMulti              wifiMulti;                              // Create an instance of the ESP8266WiFiMulti class, called 'wifiMulti'
+CRGB                          LEDs[NUM_LEDS];                         // this creates an LED array to hold the values for each led in your strip
+os_timer_t                    display_t;                              // creates timer instances. Used to react on specific time intervals
+os_timer_t                    hue_t;
+os_timer_t                    countdown_t;
+
+/*
+    Variables:
+*/
+
+CRGB                 colorCRGB                 = CRGB::Red;           // Change this if you want another default color, for example CRGB::Blue
+CHSV                 colorCHSV                 = CHSV(95, 255, 255);  // Green
+CRGB                 colorOFF                  = CRGB::Black;         // Color of the segments that are 'disabled'.
+bool                 bHostDomainConfirmed      = false;               // Flags the confirmation of the host domain
+bool                 blinkDots                 = false;               // Set this to true if you want the dots to blink in clock mode, set it to false to disable
+byte                 colorMODE                 = 0;                   // 0=CRGB, 1=CHSV, 2=Constant Color Changing pattern
+byte                 mode                      = 1;                   // 0= OFF 1= Clock, 2= Temperature, 3= Humidity, 4= Scoreboard, 5= Stopwatch, 6= Countdown
+int                  scoreLeft                 = 0;                   // Score for the left side
+int                  scoreRight                = 0;                   // Score for the right side
+long                 timerSeconds              = 0;                   // elapsed or remaining seconds (for the countdown or stopwatch)
+bool                 timerActive               = false;  	            // defines if the stopwatch is counting
+bool                 refreshDisplayFlag        = false;               // tells the loop function to refresh the Display. (DHT is blocking. And therefore not working(crashing) with the os_timer )
+char*                PC_HOST_DOMAIN            = 0;                   // Negociated host domain
+
+/*
+   setup function. Sets the ESP up for operation
+*/
+
 void setup(void) {
-  Serial.begin(115200);
-  FastLED.delay(3000);
-  FastLED.addLeds<WS2812B, DATA_PIN, GRB>(LEDs, NUM_LEDS);
-  FastLED.setCorrection( TypicalLEDStrip );
-  FastLED.setBrightness( BRIGHTNESS );
-  FastLED.clear();
-  displaySegments(0, 1);
-  displaySegments(7, 15);
-  displaySegments(16, 1);
-  displaySegments(23, 15);
-  FastLED.show();
-  os_timer_setfn(&t1sec, timer1Callback, NULL);
-  os_timer_setfn(&t30sec, timer30Callback, NULL);
-  os_timer_setfn(&t50milli, timer50Callback, NULL);
-
-  startDHT();
-
-  startSPIFFS();
-  loadConfig();
-
-  if (startWiFi() == 0) {  // Connect to WiFi network
-    // Sync clock
-    startNTP();
+  Serial.begin(115200);    // just used for debugging. Initializes the communication via the Serial port to read output from the ESP.
+  startLEDs();             // Setup LED operation
+  startDHT();              // Setup the Temperature and Humidity sensor
+  startSPIFFS();           // Setup the File System and check for Filestructure integrity
+  loadConfig();            // Load previously saved config variables from the file system
+  if (startWiFi()) {      // Connect to the WiFi network or create a accesspoint. If connected to Wifi:
+    startNTP();            // Sync clock via NTP
   }
-  // Setup MDNS responder
-  startMDNS();
-
-
-  // Start TCP (HTTP) server
-  startOTA();
+  startMDNS();             // Setup MDNS responder
+  startOTA();              // Start TCP (HTTP) server
   //Serial.println("OTA started");
-
-  startServer();
+  startServer();           // start the Webserver
   //Serial.println("TCP server started");
-  os_timer_arm(&t30sec, 15000, true);
-  os_timer_arm(&t1sec, 1000, true);
-  os_timer_arm(&t50milli, 150, true);
-
+  startTimers();           // initialize and start the update cycle
 }
+
+/*
+==========================
+\\    SETUP FUNCTIONS   //
+==========================
+*/
+
+
+void startLEDs() {
+  FastLED.addLeds<WS2812B, DATA_PIN, GRB>(LEDs, NUM_LEDS);  // Tell the fastLED instance what kind and how many LEDs are used
+  FastLED.setCorrection( TypicalSMD5050 );                  // Trying to correct the brightness differences in red green and blue
+  FastLED.setBrightness( BRIGHTNESS );                      // Set the LED's brightness
+  FastLED.clear();                                          // set all LEDs to off
+  displaySegments(0, 1);                                    // Display HI HI: Most right segment
+  displaySegments(7, 15);                                   // second most right segment
+  displaySegments(16, 1);                                   // ....
+  displaySegments(23, 15);
+  if (!blinkDots && mode == 1) displayDots(0);              // Set the dots
+  FastLED.show();                                           // Execute the changes to the LEDs
+}
+
+void startTimers() {
+  os_timer_setfn(&countdown_t, timerCallback, (byte*) 1);         // sets the callback function which is called after the timer elapsed. (specified Timer, function to call, supplied Argument(None) for the called function)
+  os_timer_setfn(&display_t, timerCallback, (byte*) 2);
+  os_timer_setfn(&hue_t, timerCallback, (byte*) 0 );
+  os_timer_arm(&display_t, DISPLAY_TIMER, true);            // starts the specified timer with a specified millisecond interval and making it repetitive (Timer, duration, repeat?)
+  os_timer_arm(&countdown_t, STOPWATCH_TIMER, true);
+  os_timer_arm(&hue_t, HUE_TIMER, true);
+}
+
 void loadConfig() {
-  File fs_file = SPIFFS.open("/setup.cfg", "r");            // Open the file for writing in SPIFFS (create if it doesn't exist)
-  if(fs_file) {
-    int r = fs_file.readStringUntil('\n').toInt();
+  File fs_file = SPIFFS.open("/setup.cfg", "r");            // Open the file for Reading in SPIFFS (filename, r = for reading)
+  if(fs_file) {                                             // If the file exists and we could open it
+    int r = fs_file.readStringUntil('\n').toInt();          // read all the settings from the file and change the global variable values accordingly (\n is the line ending delimiter)
     int g = fs_file.readStringUntil('\n').toInt();
     int b = fs_file.readStringUntil('\n').toInt();
     colorCRGB = CRGB(r,g,b);
@@ -124,45 +134,45 @@ void loadConfig() {
     //Serial.println("Brightness: " + String(FastLED.getBrightness()));
     //Serial.println("ColorMode: " + String(colorMODE));
     //Serial.println("Dots " + String(blinkDots));
-  } else {
+  } else {                                                  // couldn't open the file
     //Serial.println("No config File found");
   }
-  fs_file.close();                               // Close the file again
+  fs_file.close();                                          // Close the file again
 }
+
 void startDHT() {
-  dht.setup(pinDHT22, DHTesp::DHT22); // Connect DHT sensor to GPIO 5
+  dht.setup(PINDHT22, DHTesp::DHT22);                       // Tell the DHT where it's getting its data from and in what format
 }
-byte startWiFi() {
 
-  // Start a Wi-Fi access point, and try to connect to some given access points. Then wait for either an AP or STA connection
-  WiFi.softAP(own_ssid, own_password);             // Start the access point
-  //Serial.print("Access Point \"");
-  //Serial.print(own_ssid);
-  //Serial.println("\" started\r\n");
-  if (SPIFFS.exists("/ssid.info")){  // If an accesspoint file exists, get the ssid and password
-    File file = SPIFFS.open("/ssid.info", "r");                    // Open the file
+/*
+  Start a Wi-Fi access point, and try to connect to defalt and if given, the entered access points. Then wait for either an AP or STA connection
+*/
+bool startWiFi() {
+  WiFi.softAP(OWN_SSID, OWN_PASSWORD);                      // Start the access point
+  if (SPIFFS.exists("/ssid.info")){                         // If an accesspoint file exists, get the ssid and password
+    File file = SPIFFS.open("/ssid.info", "r");             // Open the file for reading
 
-    String ap_string = file.readStringUntil('\n');
-    char ap_name[sizeof(ap_string)];
-    ap_string.toCharArray(ap_name,sizeof(ap_string)); //read the ssid name
+    String ap_string = file.readStringUntil('\n');          // Get the AP name
+    char ap_name[sizeof(ap_string)];                        // We have to change the format from string to char. There might be an easier way..
+    ap_string.toCharArray(ap_name,sizeof(ap_string));
 
-    String pass_string = file.readStringUntil('\n');
+    String pass_string = file.readStringUntil('\n');        // Same for the Password. This Password is saved in CLEARTEXT !!! This needs some attention
     char pass[sizeof(pass_string)];
-    pass_string.toCharArray(pass,sizeof(pass_string));    //read the ssid password
-    file.close();
-    wifiMulti.addAP(ap_name,pass);         // add Wi-Fi networks you want to connect to
-    //Serial.print("Connecting to the stronger of " + ap_string + " " + AP_ssid);
+    pass_string.toCharArray(pass,sizeof(pass_string));
 
+    file.close();                                           // close the file again
+    wifiMulti.addAP(ap_name,pass);                          // add the read Wi-Fi network
+    //Serial.print("Connecting to the stronger of " + ap_string + " " + AP_ssid);
   }
-  wifiMulti.addAP(AP_ssid,AP_password);
+  wifiMulti.addAP(AP_SSID,AP_PASSWORD);                     // Add the default AP and Password
 
   //Serial.println("Connecting");
-  while (wifiMulti.run() != WL_CONNECTED && WiFi.softAPgetStationNum() < 1) {  // Wait for the Wi-Fi to connect
-    delay(250);
+  while (wifiMulti.run() != WL_CONNECTED && WiFi.softAPgetStationNum() < 1) {  // Wait for the Wi-Fi to connect or a client connecting to us
+    delay(250);                                             // wait 250 milliseconds
+    /*
     switch(wifiMulti.run()) {
       case WL_IDLE_STATUS:
         //Serial.println("Idling..");
-
         break;
       case WL_NO_SSID_AVAIL:
         //Serial.println("No AP found..");
@@ -183,54 +193,55 @@ byte startWiFi() {
         //Serial.println("disconnected..");
         break;
     }
+    */
   }
   //Serial.println("\r\n");
-  if(WiFi.softAPgetStationNum() == 0) {      // If the ESP is connected to an AP
-    Serial.print("Connected to ");
-    Serial.println(WiFi.SSID());             // Tell us what network we're connected to
-    Serial.print("IP address:\t");
-    Serial.print(WiFi.localIP());            // Send the IP address of the ESP8266 to the computer
-    WiFi.softAPdisconnect(true);
-  } else {                                   // If a station is connected to the ESP SoftAP
-    //Serial.print("Station connected to ESP8266 AP");
-    return 1;
+  if(WiFi.softAPgetStationNum() == 0) {                   // If the ESP is connected to an AP
+    //Serial.print("Connected to ");
+    //Serial.println(WiFi.SSID());                        // Tell us what network we're connected to
+    //Serial.print("IP address:\t");
+    //Serial.print(WiFi.localIP());                       // Send the IP address of the ESP8266 to the computer
+    WiFi.softAPdisconnect(true);                          // Shutdown the Access Point
+    return true;                                          // exit the function and return true to the caller
   }
-  //Serial.println("\r\n");
-  return 0;
+  //Serial.print("Station connected to ESP8266 AP");
+  return false;
 }
 
+/*
+  Start the NTP update process
+*/
 void startNTP() {
   configTime((TIMEZONE_OFFSET * 3600), (0 * 3600), "pool.ntp.org", "time.nist.gov", "time.windows.com");
-
   //Serial.print("Waiting for NTP time sync: ");
-  time_t now = time(nullptr);   // Secs since 01.01.1970 (when uninitalized starts with (8 * 3600 = 28800)
-  while (now < 8 * 3600 * 2) {  // Wait for realistic value
+  time_t now = time(nullptr);                              // Seconds since 01.01.1970 (when uninitalized starts with 0 seconds)
+  while (now < 24 * 3600 * 2) {                            // Wait for realistic value (Maximum 2 days, therafter a wrong time will be displayed)
     delay(500);
     //Serial.print(".");
     now = time(nullptr);
   }
-  checkDST();                   // Update DST
+  checkDST();                                              // check for winter or summertime
   //Serial.println("");
   //Serial.printf("Current time: %s\n", getTimeString());
 }
 
-void startMDNS() {
-  MDNS.setProbeResultCallback(MDNSProbeResultCallback, 0);
-  // Init the (currently empty) host domain string with 'mdnsName'
-  if ((!MDNSResponder::indexDomain(pcHostDomain, 0, mdnsName)) ||
-      (!MDNS.begin(pcHostDomain))) {
+bool startMDNS() {
+  MDNS.setProbeResultCallback(MDNSProbeResultCallback, 0);  // set the function to be called when TODO
+  if ((!MDNSResponder::indexDomain(PC_HOST_DOMAIN, 0, MDNS_NAME)) || (!MDNS.begin(PC_HOST_DOMAIN))) { // Init the (currently empty) host domain string with 'MDNS_NAME' and start the MDNS responder
     //Serial.println("Error setting up MDNS responder!");
-    while (1) { // STOP
-      delay(1000);
-    }
+    return false;
   }
-  MDNS.addService("http", "tcp", 80);
-
+  MDNS.addService("http", "tcp", 80);                       // Tell the world that we do serve http on a plate
+  return true;
   //Serial.println("MDNS responder started");
 }
 
-void startSPIFFS() { // Start the SPIFFS and list all contents
+/*
+ Start the SPIFFS (the file system) and list all contents
+*/
+void startSPIFFS() {
   SPIFFS.begin();                             // Start the SPI Flash File System (SPIFFS)
+  /*
   //Serial.println("SPIFFS started. Contents:");
   {
     Dir dir = SPIFFS.openDir("/");
@@ -242,36 +253,17 @@ void startSPIFFS() { // Start the SPIFFS and list all contents
     //Serial.printf("\n");
   }
   // check for config files
-  //REMOVE BEFORE SHIPPING TODO
   //SPIFFS.remove("/upload.html");
   //SPIFFS.remove("/success.html");
-  SPIFFS.remove("/index.html");
+  //SPIFFS.remove("/index.html");
   //SPIFFS.remove("/success_ssid.html");
+  */
 
-
-  if (!SPIFFS.exists("/upload.html")) { factoryReset("/upload_orig", "/upload.html"); }
-  if (!SPIFFS.exists("/success.html")) { factoryReset("/success_orig", "/success.html"); }
-  if (!SPIFFS.exists("/index.html")) { factoryReset("/index_orig", "/index.html"); }
-  if (!SPIFFS.exists("/success_ssid.html")) { factoryReset("/success_ssid_orig", "/success_ssid.html"); }
-}
-
-void factoryReset(String source, String dest) {
-  //Serial.println("No " + dest + " found, recovering from " + source);
-  File destF = SPIFFS.open(dest,"w");
-  if(!destF){
-      //Serial.println("There was an error opening the " + dest + " file for writing\n");
-      exit;
-  }
-  File sourceF = SPIFFS.open(source, "r");
-  if(!sourceF){
-    //Serial.println("Failed to open file " + source + " for reading\n");
-    exit;
-  }
-  while(sourceF.available()){
-    destF.print((char)sourceF.read());
-  }
-  destF.close();
-  sourceF.close();
+  // if any files are missing, restore them from Backup
+  if (!SPIFFS.exists("/upload.html")) { restoreFile("/upload_orig", "/upload.html"); }
+  if (!SPIFFS.exists("/success.html")) { restoreFile("/success_orig", "/success.html"); }
+  if (!SPIFFS.exists("/index.html")) { restoreFile("/index_orig", "/index.html"); }
+  if (!SPIFFS.exists("/success_ssid.html")) { restoreFile("/success_ssid_orig", "/success_ssid.html"); }
 }
 
 void startServer() {
@@ -287,68 +279,73 @@ void startServer() {
   );
 
   server.on("/", HTTP_GET, []() {                       // if the client requests the root page
-    if (!handleFileRead("/index.html"))                // send it if it exists
+    if (!handleFileRead("/index.html"))                 // send it if it exists
       server.send(404, "text/plain", "404: Not Found"); // otherwise, respond with a 404 (Not Found) error
     });
   //server.on("/reboot", reboot); //ESP.reset();
-  server.on("/read", handleRead);
-  server.on("/submit", handleSubmit);
+
+  server.on("/read", handleRead);                       // handle the regular update requests from the clients website
+
+  server.on("/submit", handleSubmit);                   // handle the data sent from the client
 
   server.onNotFound([]() {                              // If the client requests any URI
     if (!handleFileRead(server.uri()))                  // send it if it exists
       server.send(404, "text/plain", "404: Not Found"); // otherwise, respond with a 404 (Not Found) error
   });
-  server.begin();                           // Actually start the server
+
+  server.begin();                                       // Actually start the server
   //Serial.println("HTTP server started");
 }
 
 void startOTA() {
-  httpUpdater.setup(&server);
+  httpUpdater.setup(&server);                           // hook the over-the-air firmware update service onto the webserver (server)
 }
 
-void timer1Callback(void *pArg) {
-  refreshTimer();
-}
-void timer30Callback(void *pArg) {
-  refreshDisplayFlag = true;
-
-  checkDST();
-}
-void timer50Callback(void *pArg) {
-  updateHue();
-}
 /*
-   loop
+================================================================
+   The main Loop function, this is the function, which gets run continously. It's executed after the setup function and continues to loop, until power loss
+================================================================
 */
+
 void loop(void) {
   // Allow MDNS processing
-  MDNS.update();
-  server.handleClient();
-  if (refreshDisplayFlag) {
-    refreshDisplayFlag = false;
-    refreshDisplay();
+  MDNS.update();                                        // Update the MDNS
+  server.handleClient();                                // Look if we got any webserver requests waiting
+  if (refreshDisplayFlag) {                             // if the Display needs to be refreshed(see startTimers())
+    refreshDisplayFlag = false;                         // rearm the flag
+    refreshDisplay();                                   // and refresh the display
   }
 }
 
+void timerCallback(void *pArg) {               // this function is called, once the timer 'display_t' triggers
+  byte timerNr = *((int *)pArg);
+  if (timerNr == 2) {
+    updateHue;
+  } else if (timerNr == 1) {
+    refreshTimer();
+  } else if (timerNr == 0) {
+    refreshDisplayFlag = true;                            // setting the flag to refresh the display in the main loop function. We can't call the function directly since the DHT library is blocking and would therefore crash the DHT readout
+    checkDST();                                           // check for summer/winter time
+  }
+}
 
 void updateHue() {
-  if (colorMODE != 2)
-    return;
+  if (colorMODE != 2)  return;                          // if no rainbow effect desired, exit the function
 
-  colorCHSV.sat = 255;
+  colorCHSV.sat = 255;                                  // cycle through every hue value. Look up HSV for more information about the color selection
   colorCHSV.val = 255;
   if (colorCHSV.hue >= 255){
     colorCHSV.hue = 0;
   } else {
     colorCHSV.hue++;
   }
-  refreshDisplay();
+  FastLED.show();                                       // update the Display
 }
 
 void refreshDisplay() {
   ////Serial.println("refreshing Display. Mode " + String(mode));
   switch (mode) {
-    case 0:
+    case 0:                                             // OFF
       FastLED.clear();
       FastLED.show();
       break;
@@ -364,12 +361,10 @@ void refreshDisplay() {
     case 4:
       displayScoreboard();
       break;
-    case 5:
-      refreshTimer();
+    case 5:                                              // Stopwatch
       // Time counter has it's own timer
       break;
-    case 6:
-      refreshTimer();
+    case 6:                                              // Countdown
       // Countdown integrated in case 5
       break;
     default:
@@ -379,45 +374,48 @@ void refreshDisplay() {
 
 void refreshTimer() {
   if (mode == 1 && blinkDots) {
-    displayDots(3);
-  } else if (mode == 5 && timerRunning == 1) {
-    int elapsed = (time(nullptr) - timerValue);
-    elapsed = elapsed > 9999 ? 9999 : elapsed;
-    int m1 = (elapsed / 60) / 10 ;
+    displayDots(3);                                       // let the dots blink, if desired
+  } else if (mode == 5 && timerActive) {                  // If Stopwatch
+    int elapsed = (time(nullptr) - timerSeconds);         // calculate the elapsed time
+    elapsed = elapsed > 9999 ? 9999 : elapsed;            // If the elapsed seconds are more thann 9999 we continue to show 9999
+
+    int m1 = (elapsed / 60) / 10 ;                        // calculate the single digits (% = modula)
     int m2 = (elapsed / 60) % 10 ;
     int s1 = (elapsed % 60) / 10;
     int s2 = (elapsed % 60) % 10;
 
-    displaySegments(0, s2);
+    displaySegments(0, s2);                               // display the digits
     displaySegments(7, s1);
     displaySegments(16, m2);
     displaySegments(23, m1);
-    displayDots(0);
-  } else if (mode == 6) {
-    int remaining = (timerValue - time(nullptr));
-    if (remaining > 9999) {
+    displayDots(0);                                       // display the dots in solid(0)
+  } else if (mode == 6) {                                 // if we are in Countdown mode
+    int remaining = (timerSeconds - time(nullptr));       // calculate the time remaining
+    if (remaining > 9999) {                               // if remaining seconds are more than 9999, we'll show hours and minutes
       //Serial.println("More than 9999 seconds remaining. Displaying Clock");
-      time_t midnight = remaining;
+      time_t t_rem = remaining;                        // TODO check if we could cast remaining
       struct tm * timeinfo;
-      timeinfo = gmtime(&midnight);                         // Also as localtime
-      byte m = timeinfo->tm_min;                       // Minutes 0 to 59
-      byte h = timeinfo->tm_hour;                       // Seconds 0 to 61 (2 leap sec)
+      timeinfo = gmtime(&t_rem);                       // convert the remaining seconds into a time structure and get the hours and minutes remaining
+      byte m = timeinfo->tm_min;
+      byte h = timeinfo->tm_hour;
+
       int hl = (h / 10) == 0 ? 13 : (h / 10);
       int hr = h % 10;
       int ml = m / 10;
       int mr = m % 10;
+
       displaySegments(0, mr);
       displaySegments(7, ml);
       displaySegments(16, hr);
       displaySegments(23, hl);
       displayDots(0);
-    } else {
-      if (remaining % 2 == 0 && remaining < 1) {
-        FastLED.clear();
-      } else {
-        remaining = abs(remaining);
+    } else {                                               // if remaining seconds are less than 9999
+      if (remaining % 2 == 0 && remaining < 1) {           // if time elapsed, and every even second
+        FastLED.clear();                                   //  blank the display
+      } else {                                             // time is not elapsed
+        remaining = abs(remaining);                        // in case the time is elapsed, we are counting upwards again and therefore need the absolute value
         //Serial.println("Less than 9999 seconds remaining.Displaying raw seconds: " + String(remaining));
-        int m1 = (remaining / 1000);
+        int m1 = (remaining / 1000);                       // calculate the seperate digits
         int m2 = ((remaining - m1 * 1000) / 100);
         int s1 = (remaining - m1 * 1000 - m2 * 100) / 10;
         int s2 = (remaining - m1 * 1000 - m2 * 100 - s1 * 10);
@@ -426,21 +424,21 @@ void refreshTimer() {
         displaySegments(7, s1);
         displaySegments(16, m2);
         displaySegments(23, m1);
-        displayDots(1);
+        displayDots(1);                                    // hide the dots(1)
       }
     }
   }
-  FastLED.show();
+  FastLED.show();                                          // execute the changes
 }
 
 void displayClock() {
   ////Serial.println("Refreshing Clock. Time " + String(getTimeString()));
 
-  time_t now = time(nullptr);                      // Update time to now
+  time_t now = time(nullptr);                             // Update time to now
   struct tm * timeinfo;
   //time(&now);
-  timeinfo = gmtime(&now);                         // Also as localtime
-  byte m = timeinfo->tm_min;                       // Minutes 0 to 59
+  timeinfo = gmtime(&now);                                // Also as localtime
+  byte m = timeinfo->tm_min;                              // Minutes 0 to 59
   byte h = timeinfo->tm_hour;
   int hl = (h / 10) == 0 ? 13 : (h / 10);
   int hr = h % 10;
@@ -451,12 +449,11 @@ void displayClock() {
   displaySegments(7, ml);
   displaySegments(16, hr);
   displaySegments(23, hl);
-  if (!blinkDots) {displayDots(0);}
   FastLED.show();
 }
 
 void displayTemperature() {
-  float tmp = readDHT(false);
+  float tmp = readDHT(Temp);
 
   if (isnan(tmp)) {
     //Serial.println("Failed to read from DHT sensor!");
@@ -473,7 +470,7 @@ void displayTemperature() {
 }
 
 void displayHumidity() {
-  float hum = readDHT(true);
+  float hum = readDHT(Hum);
   if (isnan(hum)) {
     //Serial.println("Failed to read from DHT sensor!");
   } else {
@@ -528,7 +525,7 @@ void displayDots(int dotMode) {
 }
 
 void displaySegments(int startindex, int number) {
-  // Order: 0b0 mid top-left bottom-left bottom bottom-right top-right   top
+  // LED Order: 0b0 mid top-left bottom-left bottom bottom-right top-right   top
   byte numbers[] = {
     0b00111111, // 0
     0b00000110, // 1
@@ -553,7 +550,7 @@ void displaySegments(int startindex, int number) {
   }
 }
 
-float readDHT(bool GetHum) {
+float readDHT(DHT_modes kind) {
   static float temp = 99;               //static means keeping the value in between function calls
   static float hum = 0;
   static long lastCheck = 0;
@@ -569,7 +566,7 @@ float readDHT(bool GetHum) {
       return 0;
     }
   }
-  return GetHum ? hum : temp;           // If humidity was requested, return it, otherwise temperature
+  return (kind == 1) ? hum : temp;           // If humidity was requested, return it, otherwise temperature
 }
 
 void checkDST() {
@@ -708,15 +705,15 @@ bool MDNSProbeResultCallback(MDNSResponder* p_pMDNSResponder,
     //Serial.printf("MDNSProbeResultCallback: Host domain '%s.local' is %s\n", p_pcDomainName, (p_bProbeResult ? "free" : "already USED!"));
     if (true == p_bProbeResult) {
       // Set station hostname
-      setStationHostname(pcHostDomain);
+      setStationHostname(PC_HOST_DOMAIN);
 
       if (!bHostDomainConfirmed) {
         // Hostname free -> setup clock service
         bHostDomainConfirmed = true;
       } else {
         // Change hostname, use '-' as divider between base name and index
-        if (MDNSResponder::indexDomain(pcHostDomain, "-", 0)) {
-          p_pMDNSResponder->setHostname(pcHostDomain);
+        if (MDNSResponder::indexDomain(PC_HOST_DOMAIN, "-", 0)) {
+          p_pMDNSResponder->setHostname(PC_HOST_DOMAIN);
         } else {
           //Serial.println("MDNSProbeResultCallback: FAILED to update hostname!");
         }
@@ -749,7 +746,7 @@ void handleSubmit() {
       if (startWiFi() == 0) {  // Connect to WiFi network
         // Sync clock
         startNTP();
-      }    
+      }
     }
   }
   else if (server.hasArg("color")) {
@@ -770,8 +767,8 @@ void handleSubmit() {
     mode = server.arg("mode").toInt();
     switch (mode) {
       case 5:
-        timerValue = time(nullptr);
-        timerRunning = 1;
+        timerSeconds = time(nullptr);
+        timerActive = true;
         break;
     }
     saveConfig();
@@ -802,12 +799,12 @@ void handleSubmit() {
       timeinfo = gmtime(&now);                         // Also as localtime
       timeinfo->tm_hour = hr;
       timeinfo->tm_min = mn;
-      timerValue = mktime(timeinfo);
+      timerSeconds = mktime(timeinfo);
     }
     else if (server.arg("c_mode") == "rel") {
-      timerValue = now + hr * 3600 + mn * 60;
+      timerSeconds = now + hr * 3600 + mn * 60;
     }
-    //Serial.println("Timer value: " + String(timerValue) + " Difference: " + String(timerValue - now));
+    //Serial.println("Timer value: " + String(timerSeconds) + " Difference: " + String(timerSeconds - now));
     //Serial.println("hr: " + String(hr) + " mn: " + String(mn));
     server.send(200, "text/plane", "Starting...");
   }
@@ -817,10 +814,10 @@ void handleSubmit() {
     server.send(200, "text/plane", scoreLeft > scoreRight ? "Left" : scoreLeft < scoreRight ? "Right" : "Even");
   }
   else if (server.hasArg("reset")) {
-    factoryReset("/upload_orig", "/upload.html");
-    factoryReset("/success_orig", "/success.html");
-    factoryReset("/index_orig", "/index.html");
-    factoryReset("/success_ssid_orig", "/success_ssid.html");
+    restoreFile("/upload_orig", "/upload.html");
+    restoreFile("/success_orig", "/success.html");
+    restoreFile("/index_orig", "/index.html");
+    restoreFile("/success_ssid_orig", "/success_ssid.html");
     SPIFFS.remove("/setup.cfg");
     server.send(200, "text/plane", "Done...");
     colorCRGB = CRGB::Red;
@@ -828,8 +825,8 @@ void handleSubmit() {
     mode = 1;                // 0=Clock, 1=Temperature, 2=Humidity, 3=Scoreboard, 4=Time counter
     scoreLeft = 0;
     scoreRight = 0;
-    timerValue = 0;
-    timerRunning = 0;
+    timerSeconds = 0;
+    timerActive = false;
     blinkDots = false;        // Set this to true if you want the dots to blink in clock mode, set it to false to disable
   }
   refreshDisplay();
@@ -901,15 +898,34 @@ void handleRead() {
       "\",\"rainbow\":\"" + String(colorMODE != 0);
   }
   if (mode == 5) {
-    countdown = "\",\"countdown\":\"" + ((timerValue - time(nullptr)) < 0 ? "Not set" : String(timerValue - time(nullptr)));
+    countdown = "\",\"countdown\":\"" + ((timerSeconds - time(nullptr)) < 0 ? "Not set" : String(timerSeconds - time(nullptr)));
   }
   String json = "{\"datetime\":\"" + timeString +
-    "\",\"temperature\":\"" + String(readDHT(false)) +
-    "\",\"humidity\":\"" + String(readDHT(true)) +
+    "\",\"temperature\":\"" + String(readDHT(Temp)) +
+    "\",\"humidity\":\"" + String(readDHT(Hum)) +
     init +
     countdown +
     "\"}";
   server.send (200, "application/json", json);
   //Serial.println("Time request handled: " + json);
  //server.send(200, "text/plane", getTimeString()); //Send time value only to client ajax request
+}
+
+void restoreFile(String source, String dest) {
+  //Serial.println("No " + dest + " found, recovering from " + source);
+  File destF = SPIFFS.open(dest,"w");
+  if(!destF){
+      //Serial.println("There was an error opening the " + dest + " file for writing\n");
+      exit;
+  }
+  File sourceF = SPIFFS.open(source, "r");
+  if(!sourceF){
+    //Serial.println("Failed to open file " + source + " for reading\n");
+    exit;
+  }
+  while(sourceF.available()){
+    destF.print((char)sourceF.read());
+  }
+  destF.close();
+  sourceF.close();
 }
